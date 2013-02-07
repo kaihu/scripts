@@ -1,3 +1,6 @@
+# Original script https://github.com/duckinator/xchat-mpris2 by Nick Markwell
+# Revisions by Kai Huuhko <kai.huuhko@gmail.com>
+
 import xchat, dbus, os
 
 __module_name__ = "xchat-mpris2"
