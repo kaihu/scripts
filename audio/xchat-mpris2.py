@@ -4,40 +4,24 @@ __module_name__ = "xchat-mpris2"
 __module_version__ = "0.1"
 __module_description__ = "Fetches information from MPRIS2-compliant music players"
 
-conf_file = 'xchat-mpris-player2.txt'
-
-FILE = __file__
-DIR  = os.path.dirname(FILE)
-CONF = os.path.join(DIR, conf_file)
-
 bus = dbus.SessionBus()
 
-player = None
+dbusNamePrefix = 'org.mpris.MediaPlayer2.'
+target = None
+dbusObj = bus.get_object('org.freedesktop.DBus', '/')
+for name in dbusObj.ListNames(dbus_interface='org.freedesktop.DBus'):
+    if name.startswith(dbusNamePrefix):
+        target = name
+        break
 
-def isPlayerSpecified():
-    if player == None:
-        xchat.prnt("No player specified.")
-        xchat.prnt("Use /player <player name> to specify a default media player.")
-        return False
-    else:
-        return True
+assert target is not None
 
-def isConfigured():
-    return (os.path.exists(CONF) and open(CONF).read() != '')
-
-def loadConfig():
-    global player
-    if isConfigured():
-        player = open(CONF).read()
-        return True
-    return False
-
-def saveConfig():
-    with open(CONF, 'w') as f:
-        f.write(player)
+targetObject = bus.get_object(target, '/org/mpris/MediaPlayer2')
+mpris = dbus.Interface(targetObject, dbus_interface='org.mpris.MediaPlayer2.Player')
+properties = dbus.Interface(targetObject, dbus_interface='org.freedesktop.DBus.Properties')
 
 def status(str):
-    xchat.prnt("[%s] %s" % (player, str))
+    xchat.prnt("[%s] %s" % (getPlayerVersion(), str))
 
 # Pass in milliseconds, get (minutes, seconds)
 def parseSongPosition(time):
@@ -56,10 +40,7 @@ def formatTime(time):
 
 def performAction(action):
     try:
-        remote_object = bus.get_object("org.mpris.MediaPlayer2.%s" % (player), "/org/mpris/MediaPlayer2")
-        iface = dbus.Interface(remote_object, "org.mpris.MediaPlayer2.Player")
-
-        fn = getattr(iface, action)
+        fn = getattr(mpris, action)
         if fn:
             return fn()
     except dbus.exceptions.DBusException:
@@ -67,28 +48,22 @@ def performAction(action):
 
 def getProperty(interface, prop):
     try:
-        remote_object = bus.get_object("org.mpris.MediaPlayer2.%s" % (player), "/org/mpris/MediaPlayer2")
-        iface = dbus.Interface(remote_object, "org.freedesktop.DBus.Properties")
-
-        return iface.Get(interface, prop)
+        return properties.Get(interface, prop)
     except dbus.exceptions.DBusException:
         return False
 
 def getSongInfo():
     try:
-        remote_object = bus.get_object("org.mpris.MediaPlayer2.%s" % (player), "/org/mpris/MediaPlayer2")
-        iface = dbus.Interface(remote_object, "org.freedesktop.DBus.Properties")
-
-        data = iface.Get("org.mpris.MediaPlayer2.Player", "Metadata")
+        data = properties.Get("org.mpris.MediaPlayer2.Player", "Metadata", utf8_strings=True)
 
         titles = data["xesam:title"]
-        title = ", ".join(data["xesam:title"]).encode("utf-8") if isinstance(titles, list) else titles.encode("utf-8")
+        title = ", ".join(data["xesam:title"]) if isinstance(titles, list) else titles
 
         albums = data["xesam:album"]
-        album = ", ".join(data["xesam:album"]).encode("utf-8") if isinstance(albums, list) else albums.encode('utf-8')
+        album = ", ".join(data["xesam:album"]) if isinstance(albums, list) else albums
 
         artists = data["xesam:artist"]
-        artist = ", ".join(data["xesam:artist"]).encode("utf-8") if isinstance(artists, list) else artists.encode('utf-8')
+        artist = ", ".join(data["xesam:artist"]) if isinstance(artists, list) else artists
 
         pos = getProperty("org.mpris.MediaPlayer2.Player", "Position")
         pos = formatTime(parseSongPosition(pos))
@@ -106,42 +81,21 @@ def getPlayerVersion():
         return "DBus Exception"
 
 def mprisPlayerVersion(word, word_eol, userdata):
-    if isPlayerSpecified():
-        xchat.prnt(str(getPlayerVersion()))
+    xchat.prnt(str(getPlayerVersion()))
     return xchat.EAT_ALL
 
 def mprisNp(word, word_eol, userdata):
-    if isPlayerSpecified():
-        info = getSongInfo()
-        if not info == False:
-            xchat.command("ME is listening to %s - %s [%s] [%s/%s] with %s" % info)
-        else:
-            xchat.prnt("Error in getSongInfo()")
-    return xchat.EAT_ALL
-
-def mprisPlayer(word, word_eol, userdata):
-    global player
-    if len(word) > 1:
-        oldplayer = player
-        player = word[1]
-        if not isPlayerSpecified():
-            pass
-        elif oldplayer != '' and oldplayer != player:
-            xchat.prnt("Media player changed from \"%s\" to \"%s\"" % (oldplayer, player))
-        else:
-            xchat.prnt("Media player set to \"%s\"" % player)
-        saveConfig()
-        return xchat.EAT_ALL
+    info = getSongInfo()
+    if not info == False:
+        xchat.command("ME is listening to {0} - {1} [{2}] [{3}/{4}] with {5}".format(*info))
     else:
-        pass
-    xchat.prnt("USAGE: %s <player name>, set default meda player." % word[0])
+        xchat.prnt("Error in getSongInfo()")
     return xchat.EAT_ALL
 
 def mprisPlay(word, word_eol, userdata):
     try:
-        if isPlayerSpecified():
-            status('Playing')
-            performAction('Play')
+        status('Playing')
+        performAction('Play')
     except dbus.exceptions.DBusException:
         xchat.prnt("DBus Exception")
         pass
@@ -149,9 +103,8 @@ def mprisPlay(word, word_eol, userdata):
 
 def mprisPause(word, word_eol, userdata):
     try:
-        if isPlayerSpecified():
-            status('Paused')
-            performAction('Pause')
+        status('Paused')
+        performAction('Pause')
     except dbus.exceptions.DBusException:
         xchat.prnt("DBus Exception")
         pass
@@ -159,9 +112,8 @@ def mprisPause(word, word_eol, userdata):
 
 def mprisStop(word, word_eol, userdata):
     try:
-        if isPlayerSpecified():
-            status('Stopped')
-            performAction('Stop')
+        status('Stopped')
+        performAction('Stop')
     except dbus.exceptions.DBusException:
         xchat.prnt("DBus Exception")
         pass
@@ -169,9 +121,8 @@ def mprisStop(word, word_eol, userdata):
 
 def mprisPrev(word, word_eol, userdata):
     try:
-        if isPlayerSpecified():
-            status('Playing previous song.')
-            performAction('Previous')
+        status('Playing previous song.')
+        performAction('Previous')
     except dbus.exceptions.DBusException:
         xchat.prnt("DBus Exception")
         pass
@@ -179,9 +130,8 @@ def mprisPrev(word, word_eol, userdata):
 
 def mprisNext(word, word_eol, userdata):
     try:
-        if isPlayerSpecified():
-            status('Playing next song.')
-            performAction('Next')
+        status('Playing next song.')
+        performAction('Next')
     except dbus.exceptions.DBusException:
         xchat.prnt("DBus Exception")
         pass
@@ -189,14 +139,10 @@ def mprisNext(word, word_eol, userdata):
 
 xchat.prnt("MPRIS2 now playing script initialized")
 
-if isConfigured():
-    loadConfig()
-    xchat.prnt("Current media player is %s" % player)
+xchat.prnt("Current media player is %s" % getPlayerVersion())
 
-xchat.prnt("Use /player <player name> to specify the media player you are using.")
 xchat.prnt("Use /np to send information on the current song to the active channel.")
 xchat.prnt("Also provides: /next, /prev, /play, /pause, /stop, /playerversion")
-xchat.hook_command("PLAYER", mprisPlayer, help="Usage: PLAYER <player name>, set default player.\nOnly needs to be done initially and when changing players.")
 xchat.hook_command("NP",     mprisNp,     help="Usage: NP, send information on current song to the active channel")
 xchat.hook_command("NEXT",   mprisNext,   help="Usage: NEXT, play next song")
 xchat.hook_command("PREV",   mprisPrev,   help="Usage: PREV, play previous song")
