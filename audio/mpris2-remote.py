@@ -1,4 +1,8 @@
 #!/usr/bin/env python2
+#
+# Original script https://bitbucket.org/whitelynx/pymprisr by David Bronke
+# Revisions by Kai Huuhko <kai.huuhko@gmail.com>
+
 import sys
 import dbus
 
