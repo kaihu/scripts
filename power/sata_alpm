@@ -1,0 +1,10 @@
+#!/bin/sh
+
+for f in /sys/class/scsi_host/host*; do
+	[ -w "$f/link_power_management_policy" ] || continue
+	printf "Setting SATA ALPM on %s to %s..." "${f##*/}" "min_power"
+	echo "min_power" > "$f/link_power_management_policy" && echo Done. || \
+	    echo Failed.
+done
+
+exit 0

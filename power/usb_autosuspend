@@ -1,0 +1,8 @@
+#!/bin/sh
+
+for dev in /sys/bus/usb/devices/* ; do
+	echo Setting $dev to auto
+	echo auto > $dev/power/control
+	done
+
+exit 0
