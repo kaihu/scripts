@@ -90,7 +90,14 @@ def mprisPlayerVersion(word, word_eol, userdata):
 def mprisNp(word, word_eol, userdata):
     info = getSongInfo()
     if not info == False:
-        xchat.command("ME is listening to {0} - {1} [{2}] [{3}/{4}] with {5}".format(*info))
+        s = "ME is listening to "
+        s = s + info[1]
+        if info[0] != "":
+            s = s + " by " + info[0]
+        if info[2] != "":
+            s = s + " [" + info[2] + "]"
+        s = s + " [{3}/{4}] with {5}".format(*info)
+        xchat.command(s)
     else:
         xchat.prnt("Error in getSongInfo()")
     return xchat.EAT_ALL
