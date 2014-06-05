@@ -10,18 +10,23 @@ __module_description__ = "Fetches information from MPRIS2-compliant music player
 bus = dbus.SessionBus()
 
 dbusNamePrefix = 'org.mpris.MediaPlayer2.'
-target = None
-dbusObj = bus.get_object('org.freedesktop.DBus', '/')
-for name in dbusObj.ListNames(dbus_interface='org.freedesktop.DBus'):
-    if name.startswith(dbusNamePrefix):
-        target = name
-        break
 
-assert target is not None
+def target_get():
+    target = None
 
-targetObject = bus.get_object(target, '/org/mpris/MediaPlayer2')
-mpris = dbus.Interface(targetObject, dbus_interface='org.mpris.MediaPlayer2.Player')
-properties = dbus.Interface(targetObject, dbus_interface='org.freedesktop.DBus.Properties')
+    dbusObj = bus.get_object('org.freedesktop.DBus', '/')
+    for name in dbusObj.ListNames(dbus_interface='org.freedesktop.DBus'):
+        if name.startswith(dbusNamePrefix):
+            target = name
+            break
+
+    if target is None: raise RuntimeError
+
+    targetObject = bus.get_object(target, '/org/mpris/MediaPlayer2')
+    mpris = dbus.Interface(targetObject, dbus_interface='org.mpris.MediaPlayer2.Player')
+    properties = dbus.Interface(targetObject, dbus_interface='org.freedesktop.DBus.Properties')
+
+    return mpris, properties
 
 def status(str):
     xchat.prnt("[%s] %s" % (getPlayerVersion(), str))
@@ -42,20 +47,28 @@ def formatTime(time):
         return "0:00"
 
 def performAction(action):
+    mpris, properties = target_get()
+
     try:
         fn = getattr(mpris, action)
         if fn:
             return fn()
-    except dbus.exceptions.DBusException:
+    except dbus.exceptions.DBusException as e:
+        xchat.prnt(repr(e))
         return False
 
 def getProperty(interface, prop):
+    mpris, properties = target_get()
+
     try:
         return properties.Get(interface, prop)
-    except dbus.exceptions.DBusException:
+    except dbus.exceptions.DBusException as e:
+        xchat.prnt(repr(e))
         return False
 
 def getSongInfo():
+    mpris, properties = target_get()
+
     try:
         data = properties.Get("org.mpris.MediaPlayer2.Player", "Metadata", utf8_strings=True)
 
@@ -74,14 +87,21 @@ def getSongInfo():
         version = getProperty("org.mpris.MediaPlayer2", "Identity")
 
         return (artist, title, album, pos, length, version)
-    except dbus.exceptions.DBusException:
+    except dbus.exceptions.DBusException as e:
+        xchat.prnt(repr(e))
         return False
 
 def getPlayerVersion():
     try:
+        mpris, properties = target_get()
+    except RuntimeError:
+        return None
+
+    try:
         return getProperty("org.mpris.MediaPlayer2", "Identity")
-    except dbus.exceptions.DBusException:
-        return "DBus Exception"
+    except dbus.exceptions.DBusException as e:
+        xchat.prnt(repr(e))
+        return None
 
 def mprisPlayerVersion(word, word_eol, userdata):
     xchat.prnt(str(getPlayerVersion()))
@@ -98,6 +118,21 @@ def mprisNp(word, word_eol, userdata):
             s = s + " [" + info[2] + "]"
         s = s + " [{3}/{4}] with {5}".format(*info)
         xchat.command(s)
+    else:
+        xchat.prnt("Error in getSongInfo()")
+    return xchat.EAT_ALL
+
+def mprisNpTest(word, word_eol, userdata):
+    info = getSongInfo()
+    if not info == False:
+        s = ""
+        s = s + info[1]
+        if info[0] != "":
+            s = s + " by " + info[0]
+        if info[2] != "":
+            s = s + " [" + info[2] + "]"
+        s = s + " [{3}/{4}] with {5}".format(*info)
+        xchat.prnt(s)
     else:
         xchat.prnt("Error in getSongInfo()")
     return xchat.EAT_ALL
@@ -153,10 +188,11 @@ xchat.prnt("Current media player is %s" % getPlayerVersion())
 
 xchat.prnt("Use /np to send information on the current song to the active channel.")
 xchat.prnt("Also provides: /next, /prev, /play, /pause, /stop, /playerversion")
-xchat.hook_command("NP",     mprisNp,     help="Usage: NP, send information on current song to the active channel")
-xchat.hook_command("NEXT",   mprisNext,   help="Usage: NEXT, play next song")
-xchat.hook_command("PREV",   mprisPrev,   help="Usage: PREV, play previous song")
-xchat.hook_command("PLAY",   mprisPlay,   help="Usage: PLAY, play the music")
-xchat.hook_command("PAUSE",  mprisPause,  help="Usage: PAUSE, pause the music")
-xchat.hook_command("STOP",   mprisStop,   help="Usage: STOP, hammer time!")
+xchat.hook_command("NP",      mprisNp,     help="Usage: NP, send information on current song to the active channel")
+xchat.hook_command("NP_TEST", mprisNpTest, help="Usage: NP_TEST, echo information on current song to the current tab")
+xchat.hook_command("NEXT",    mprisNext,   help="Usage: NEXT, play next song")
+xchat.hook_command("PREV",    mprisPrev,   help="Usage: PREV, play previous song")
+xchat.hook_command("PLAY",    mprisPlay,   help="Usage: PLAY, play the music")
+xchat.hook_command("PAUSE",   mprisPause,  help="Usage: PAUSE, pause the music")
+xchat.hook_command("STOP",    mprisStop,   help="Usage: STOP, hammer time!")
 xchat.hook_command("PLAYERVERSION", mprisPlayerVersion, help="Usage: PLAYERVERSION, version of the media player you are using")

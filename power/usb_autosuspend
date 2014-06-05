@@ -1,8 +1,9 @@
 #!/bin/sh
 
-for dev in /sys/bus/usb/devices/* ; do
-	echo Setting $dev to auto
-	echo auto > $dev/power/control
+for dev in /sys/bus/usb/devices/usb4 ; do
+	echo -n "Setting $dev to auto... "
+	echo auto > $dev/power/control &&
+	echo "Set to `cat $dev/power/control`"
 	done
 
 exit 0
